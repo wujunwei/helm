@@ -24,10 +24,12 @@ import (
 	"testing"
 
 	"helm.sh/helm/v3/internal/test/ensure"
+	"helm.sh/helm/v3/pkg/action"
 	"helm.sh/helm/v3/pkg/chart"
 	"helm.sh/helm/v3/pkg/chart/loader"
 	"helm.sh/helm/v3/pkg/chartutil"
 	"helm.sh/helm/v3/pkg/helmpath"
+	"helm.sh/helm/v3/pkg/lint/support"
 )
 
 func TestCreateCmd(t *testing.T) {
@@ -36,7 +38,7 @@ func TestCreateCmd(t *testing.T) {
 	dir := ensure.TempDir(t)
 	defer testChdir(t, dir)()
 
-	// Run a create
+	// Run a creation
 	if _, _, err := executeActionCommand("create " + cname); err != nil {
 		t.Fatalf("Failed to run create: %s", err)
 	}
@@ -58,6 +60,18 @@ func TestCreateCmd(t *testing.T) {
 	}
 	if c.Metadata.APIVersion != chart.APIVersionV2 {
 		t.Errorf("Wrong API version: %q", c.Metadata.APIVersion)
+	}
+
+	client := action.NewLint()
+	client.Strict = true
+	result := client.Run([]string{cname}, map[string]interface{}{
+		"autoscaling": map[string]interface{}{"enabled": true},
+		"ingress":     map[string]interface{}{"enabled": true},
+	})
+	for _, message := range result.Messages {
+		if message.Severity >= support.WarningSev {
+			t.Errorf("lint warning/errors: %s path: %s", message.Err, message.Path)
+		}
 	}
 }
 
